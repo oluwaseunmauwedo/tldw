@@ -3,6 +3,7 @@
  */
 
 let csrfToken: string | null = null;
+let csrfTokenPromise: Promise<string | null> | null = null;
 
 /**
  * Get CSRF token from meta tag or response header
@@ -13,35 +14,47 @@ export async function getCSRFToken(): Promise<string | null> {
     return csrfToken;
   }
 
-  // Try to get token from cookie (will be set after first authenticated request)
-  const cookies = document.cookie.split(';');
-  for (const cookie of cookies) {
-    const [name, value] = cookie.trim().split('=');
-    if (name === 'csrf-token') {
-      csrfToken = value;
-      return csrfToken;
-    }
+  if (csrfTokenPromise) {
+    return csrfTokenPromise;
   }
 
-  // Make a request to get a new token if needed
-  try {
-    const response = await fetch('/api/csrf-token', {
-      method: 'GET',
-      credentials: 'include'
-    });
-
-    if (response.ok) {
-      const token = response.headers.get('X-CSRF-Token');
-      if (token) {
-        csrfToken = token;
-        return token;
+  csrfTokenPromise = (async () => {
+    // Try to get token from cookie (will be set after first authenticated request)
+    const cookies = document.cookie.split(';');
+    for (const cookie of cookies) {
+      const [name, value] = cookie.trim().split('=');
+      if (name === 'csrf-token') {
+        csrfToken = value;
+        return csrfToken;
       }
     }
-  } catch (error) {
-    console.error('Failed to fetch CSRF token:', error);
-  }
 
-  return null;
+    // Make a request to get a new token if needed
+    try {
+      const response = await fetch('/api/csrf-token', {
+        method: 'GET',
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const token = response.headers.get('X-CSRF-Token');
+        if (token) {
+          csrfToken = token;
+          return token;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch CSRF token:', error);
+    }
+
+    return null;
+  })();
+
+  try {
+    return await csrfTokenPromise;
+  } finally {
+    csrfTokenPromise = null;
+  }
 }
 
 /**

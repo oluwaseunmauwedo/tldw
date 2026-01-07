@@ -6,7 +6,12 @@ import {
 } from '@/lib/rate-limiter';
 import { AuditLogger, AuditAction } from '@/lib/audit-logger';
 import { createClient } from '@/lib/supabase/server';
-import { validateCSRF, injectCSRFToken } from '@/lib/csrf-protection';
+import {
+  validateCSRF,
+  injectCSRFToken,
+  getCSRFTokenFromCookie,
+  validateCSRFToken
+} from '@/lib/csrf-protection';
 
 export interface SecurityMiddlewareConfig {
   rateLimit?: {
@@ -132,10 +137,14 @@ export function withSecurity(
         response.headers.set('Access-Control-Allow-Credentials', 'true');
       }
 
-      // Inject new CSRF token for subsequent requests (if CSRF is enabled)
+      // Inject CSRF token only if missing or invalid to avoid unnecessary rotation
       if (config.csrfProtection) {
-        const { response: csrfResponse } = injectCSRFToken(response);
-        return csrfResponse;
+        const existingToken = getCSRFTokenFromCookie(req);
+        const hasValidToken = validateCSRFToken(existingToken, existingToken);
+        if (!hasValidToken) {
+          const { response: csrfResponse } = injectCSRFToken(response);
+          return csrfResponse;
+        }
       }
 
       return response;
